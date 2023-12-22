@@ -53,7 +53,7 @@
       dest: /etc/pihole/setupVars.conf
       content: |
         #; Created via Ansible
-        #; Make teh INSTALL_WEB_SERVER or INTERFACE false along with LIGHTPPD_ENABLED false to not install
+        #; Make the INSTALL_WEB_SERVER or INTERFACE false along with LIGHTPPD_ENABLED false to not install
         #; the associated web interface
         PIHOLE_INTERFACE=eth0
         PIHOLE_DNS_1=8.8.8.8
