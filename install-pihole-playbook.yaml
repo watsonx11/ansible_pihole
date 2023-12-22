@@ -1,0 +1,106 @@
+---
+- name: Check to See if Pi-Hole is installed, and Install if necessary
+  hosts: pihole
+  become: yes
+  become_method: sudo
+  tasks:
+
+  - name: Check to see if Pi-hole is installed
+    stat:
+      path: /etc/init.d/pihole-FTL
+    register: pihole_service
+
+  - name: Check if Pi-hole Admin Page exists
+    stat:
+      path: /var/www/html/admin
+    register: pihole_admin
+
+  - name: Report Pi-hole installation status
+    debug:
+      msg: "Pi-hole is installed"
+    when: pihole_service.stat.exists and pihole_admin.stat.exists
+
+  - name: Pi-hole not installed
+    debug:
+      msg: "Pi-hole is not installed"
+    when: not (pihole_service.stat.exists and pihole_admin.stat.exists)
+
+  - name: Create pihole user, if it does not exist
+    user:
+      name: pihole
+      system: yes
+      shell: /bin/false
+      home: /etc/pihole
+      create_home: yes
+
+  - name: Check if setupVars.conf exists
+    stat:
+      path: /etc/pihole/setupVars.conf
+    register: setupVars_status
+
+  - name: Report if setupVars.conf exists
+    debug:
+      msg: "setupVars.conf exists"
+    when: setupVars_status.stat.exists
+
+  - name: Report that setupVars.conf does not exist
+    debug:
+      msg: "setupVars.conf does not exist"
+    when: not (setupVars_status.stat.exists)
+
+  - name: Create /etc/pihole/setupVars.conf
+    copy:
+      dest: /etc/pihole/setupVars.conf
+      content: |
+        #; Created via Ansible
+        #; Make teh INSTALL_WEB_SERVER or INTERFACE false along with LIGHTPPD_ENABLED false to not install
+        #; the associated web interface
+        PIHOLE_INTERFACE=eth0
+        PIHOLE_DNS_1=8.8.8.8
+        PIHOLE_DNS_2=8.8.4.4
+        QUERY_LOGGING=true
+        INSTALL_WEB_SERVER=true
+        INSTALL_WEB_INTERFACE=true
+        LIGHTTPD_ENABLED=true
+        CACHE_SIZE=10000
+        DNS_FQDN_REQUIRED=true
+        DNS_BOGUS_PRIV=true
+        DNSMASQ_LISTENING=local
+        BLOCKING_ENABLED=true
+      owner: root
+      group: root
+      mode: '0644'
+    when: not (setupVars_status.stat.exists)
+
+  - name: Create /tmp/pihole directory
+    file:
+      path: "{{ item.path }}"
+      state: "{{ item.state }}"
+      mode: "{{ item.mode }}"
+      owner: "{{ item.owner }}"
+      group: "{{ item.group }}"
+    loop:
+      - { path: "/tmp/pihole", state: "directory", mode: "0770", owner: "root", group: "root"}
+
+  - name: Download Pi-hole Installation Script
+    get_url:
+      url: https://install.pi-hole.net
+      dest: /tmp/pihole/install.pi-hole.sh
+      mode: '0755'
+    become: true
+    when: not (pihole_service.stat.exists and pihole_admin.stat.exists)
+
+  - name: Execute Pi-hole installation script in unattended mode (This might take sometime)
+    shell:
+      cmd: /tmp/pihole/install.pi-hole.sh --unattended
+    become: true
+    when: not (pihole_service.stat.exists and pihole_admin.stat.exists)
+
+  - name: Cleanup Installation Artifacts
+    file:
+      path: "{{ item.path }}"
+      state: "{{ item.state }}"
+    loop:
+      - { path: "/tmp/pihole/install.pi-hole.sh", state: "absent"}
+      - { path: "/tmp/pihole", state: "absent"}
+

@@ -1,0 +1,125 @@
+####################################################################################################
+#  ansible-playbook -i ../host_ini/host.ini unbound-playbook.yaml -u watsonx11 --ask-become-pass
+####################################################################################################
+---
+- name: Turn a Pihole into a Recurrsive DNS
+  hosts: pihole
+  become: yes
+  become_method: sudo
+  vars_prompt:
+    - name: "pihole_password"
+      prompt: "Enter Pi-Hole password"
+      private: yes
+
+  handlers:
+    - name: Restart Unbound
+      service:
+        name: unbound
+        state: restarted
+    
+    - name: Restart Pi-Hole DNS
+      service:
+        name: pihole-FTL
+        state: restarted
+
+  tasks:
+
+  - name: Check if Unbound is installed
+    command: which unbound
+    register: unbound_installed
+    failed_when: false
+    changed_when: false
+
+  - name: Gather service facts
+    service_facts:
+    when: unbound_installed.rc != 0
+
+  - name: Check if Unbound service is running
+    debug:
+      var: services.unbound
+    when: unbound_installed.rc != 0
+
+  - name: Install Unbound Package if not already installed
+    apt:
+      name: unbound 
+      state: present
+      update_cache: yes
+    when: unbound_installed.rc != 0 and (not services.unbound or services.unbound.state != 'running')
+    
+  - name: Ensure Logging Directory for Unbound exists
+    file:
+      path: "{{ item.path }}"
+      state: "{{ item.state }}"
+      mode: "{{ item.mode }}"
+      owner: "{{ item.owner }}"
+      group: "{{ item.group }}"
+    loop:
+      - { path: "/var/log/unbound", state: "directory", mode: "0755", owner: "root", group: "root" }
+      - { path: "/var/log/unbound/unbound.log", state: "touch", mode: "0644", owner: "unbound", group: "unbound"}
+
+  - name: Download Current Root Hints File
+    get_url:
+      url: https://www.internic.net/domain/named.root
+      dest: /var/lib/unbound/root.hints
+
+  - name: Deploy Pi-hole configuration for Unbound
+    copy:
+      src: ./configuration_files/pi-hole.conf
+      dest: /etc/unbound/unbound.conf.d/pi-hole.conf
+      owner: root
+      group: root
+      follow: false #This is kept to show the default state only, it is not needed
+
+  - name: Configure EDNS and DNS settings for Pi-hole
+    lineinfile:
+      path: "{{ item.path }}"
+      line: "{{ item.line | default(omit) }}"
+      create: "{{ item.create | default(omit) }}"
+      regexp: "{{ item.regexp | default(omit) }}"
+      backrefs: "{{ item.backrefs | default(omit) }}"
+      state: "{{ item.state | default(omit) }}"
+    loop:
+      - { path: "/etc/dnsmasq.d/99-edns.conf", line: "edns-packet-max=1232", create: yes }
+      - { path: "/etc/pihole/setupVars.conf", regexp: "^PIHOLE_DNS_1=", line: "PIHOLE_DNS_1=127.0.0.1#5335", backrefs: yes }
+      - { path: "/etc/pihole/setupVars.conf", regexp: "^PIHOLE_DNS_2=", state: "absent"}
+
+  - name: Disable Unbound-ResolveConf.service
+    systemd:
+      name: unbound-resolvconf.service
+      enabled: no
+      state: stopped
+
+  - name: Comment out unbound_conf line in /etc/resolveconf.conf
+    lineinfile:
+      path: /etc/resolvconf.conf
+      regexp: '^unbound_conf='
+      line: '#unbound_conf='
+      backrefs: yes 
+
+  - name: Remove resolveconf_resolvers.conf file
+    file:
+      path: /etc/unbound/unbound.conf.d/resolvconf_resolvers.conf
+      state: absent
+
+  - name: Ensure line is present in /etc/apparmor.d/local/usr.sbin.unbound
+    lineinfile:
+      path: /etc/apparmor.d/local/usr.sbin.unbound
+      line: '/var/log/unbound/unbound.log rw,'
+      create: yes
+      state: present
+
+  - name: Update Pi-Hole
+    shell:
+      cmd: pihole -up
+
+  - name: Change Pi-hole web password
+    shell:
+      cmd: "pihole -a -p {{ pihole_password }}"
+
+  - name: Restart Unbound and Pi-Hole services
+    service:
+      name: "{{ item }}"
+      state: restarted
+    loop:
+      - unbound
+      - pihole-FTL

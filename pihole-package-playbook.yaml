@@ -1,0 +1,32 @@
+---
+- name: Update, Install, and Upgrade Packages for Pihole
+  hosts: pihole
+  become: yes
+  become_method: sudo
+  tasks:
+
+  - name: Perform an apt udpate
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+
+  - name: Install Required Packages for Pi-hole
+    apt:
+      name: "{{ item.name }}"
+      state: "{{ item.state }}"
+    loop:
+      - { name: "vim", state: "present"}
+      - { name: "git", state: "present"}
+      - { name: "sqlite3", state: "present"}
+      - { name: "dialog", state: "present"}
+      - { name: "dnsutils", state: "present"}
+      - { name: "ca-certificates", state: "present"}
+      - { name: "iproute2", state: "present"}
+      - { name: "idn2", state: "present"}
+      - { name: "netcat-openbsd", state: "present"}
+      - { name: "jq", state: "present"}
+      - { name: "unzip", state: "present"}
+
+  - name: Perform an apt upgrade
+    apt:
+      upgrade: 'yes'
