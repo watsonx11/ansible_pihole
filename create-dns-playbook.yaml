@@ -1,6 +1,3 @@
-####################################################################################################
-#  ansible-playbook -i ../host_ini/host.ini unbound-playbook.yaml -u watsonx11 --ask-become-pass
-####################################################################################################
 ---
 - name: Turn a Pihole into a Recurrsive DNS
   hosts: pihole
