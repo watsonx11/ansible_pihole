@@ -104,3 +104,5 @@
       - { path: "/tmp/pihole/install.pi-hole.sh", state: "absent"}
       - { path: "/tmp/pihole", state: "absent"}
 
+  #TODO add a check to ensure pihole is up and running with the base configuration
+

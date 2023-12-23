@@ -11,22 +11,33 @@
       cache_valid_time: 3600
 
   - name: Install Required Packages for Pi-hole
+    vars:
+      package_state: "present"
     apt:
       name: "{{ item.name }}"
       state: "{{ item.state }}"
-    loop:
-      - { name: "vim", state: "present"}
-      - { name: "git", state: "present"}
-      - { name: "sqlite3", state: "present"}
-      - { name: "dialog", state: "present"}
-      - { name: "dnsutils", state: "present"}
-      - { name: "ca-certificates", state: "present"}
-      - { name: "iproute2", state: "present"}
-      - { name: "idn2", state: "present"}
-      - { name: "netcat-openbsd", state: "present"}
-      - { name: "jq", state: "present"}
-      - { name: "unzip", state: "present"}
+    loop: #Pre-Installing some of the required Pi-hole packages to reduce the installation
+      - { name: "vim", state: "{{ package_state }}"}
+      - { name: "git", state: "{{ package_state }}"}
+      - { name: "sqlite3", state: "{{ package_state }}"}
+      - { name: "dialog", state: "{{ package_state }}"}
+      - { name: "dnsutils", state: "{{ package_state }}"}
+      - { name: "ca-certificates", state: "{{ package_state }}"}
+      - { name: "iproute2", state: "{{ package_state }}"}
+      - { name: "idn2", state: "{{ package_state }}"}
+      - { name: "netcat-openbsd", state: "{{ package_state }}"}
+      - { name: "jq", state: "{{ package_state }}"}
+      - { name: "unzip", state: "{{ package_state }}"}
 
   - name: Perform an apt upgrade
     apt:
       upgrade: 'yes'
+
+  - name: Remove all uneeded dependancies
+    apt:
+      autoremove: yes
+      purge: true
+
+  - name: Run the equivalent of apt clean
+    apt:
+      clean: yes

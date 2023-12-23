@@ -3,12 +3,6 @@
   hosts: pihole
   become: yes
   become_method: sudo
-  #Commented out for this commit, changed to generating a random password vice manual entry (line:113)
-  # vars_prompt: 
-  #   - name: "pihole_password"
-  #     prompt: "Enter Pi-Hole password"
-  #     private: yes
-
   handlers:
     - name: Restart Unbound
       service:
@@ -21,7 +15,6 @@
         state: restarted
 
   tasks:
-  
   - name: Check if Unbound is installed
     command: which unbound
     register: unbound_installed
@@ -111,13 +104,13 @@
       cmd: pihole -up
 
   - name: Generate the Pi-hole web password
-    shell:
+    shell: 
       cmd: openssl rand -base64 12
     register: pihole_password
 
   - name: Change Pi-hole web password
     shell:
-      cmd: "pihole -a -p {{ pihole_password }}"
+      cmd: "pihole -a -p {{ pihole_password.stdout }}"
 
   - name: Restart Unbound and Pi-Hole services
     service:
@@ -129,4 +122,4 @@
 
   - name: Print the Pi-hole password
     debug:
-      msg: "This password is not saved, use {{ pihole_password.stdout }} to access the Web Interface"
+      msg: "This password will not be saved, use {{ pihole_password.stdout }} to access the Web Interface"
