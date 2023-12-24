@@ -1,0 +1,51 @@
+---
+- name: Configure IP-Tables for Pi-hole
+  hosts: pihole
+  become: yes
+  become_method: sudo
+  tasks:
+
+  - name: Perform an apt udpate
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+
+  - name: Check/Install iptables-persistent package
+    vars:
+      package_state: "present"
+    apt:
+      name: "{{ item.name }}"
+      state: "{{ item.state }}"
+    loop: 
+      - { name: "iptables-persistent", state: "{{ package_state }}"}
+
+  - name: Reject incoming TCP/UDP traffic on port 443/80 (IPv4)
+    iptables:
+      chain: "{{ item.chain }}"
+      protocol: "{{ item.protocol }}"
+      destination_port: "{{ item.destination_port }}"
+      jump: "{{ item.jump }}"
+      reject_with: "{{ item.reject_with }}"
+      ip_version: "{{ item.ip_version }}"
+    loop:
+      - { chain: "INPUT", protocol: "tcp", destination_port: "443", jump: "REJECT", reject_with: "tcp-reset", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "udp", destination_port: "80", jump: "REJECT", reject_with: "icmp-port-unreachable", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "udp", destination_port: "443", jump: "REJECT", reject_with: "icmp-port-unreachable", ip_version: "ipv4"}
+
+  - name: Reject incoming TCP/UDP traffic on port 443/80 (IPv6)
+    iptables:
+      chain: "{{ item.chain }}"
+      protocol: "{{ item.protocol }}"
+      destination_port: "{{ item.destination_port }}"
+      jump: "{{ item.jump }}"
+      reject_with: "{{ item.reject_with }}"
+      ip_version: "{{ item.ip_version }}"
+    loop:
+      - { chain: "INPUT", protocol: "tcp", destination_port: "443", jump: "REJECT", reject_with: "tcp-reset", ip_version: "ipv6"}
+      - { chain: "INPUT", protocol: "udp", destination_port: "80", jump: "REJECT", reject_with: "icmp6-port-unreachable", ip_version: "ipv6"}
+      - { chain: "INPUT", protocol: "udp", destination_port: "443", jump: "REJECT", reject_with: "icmp6-port-unreachable", ip_version: "ipv6"}
+
+  - name: Save iptable changes
+    shell:
+      cmd: netfilter-persistent save
+    become: true

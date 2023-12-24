@@ -59,3 +59,7 @@ Enter Ansible to the rescue.
 the `install-pihole-playbook.yaml` 
 
 
+# Ip-Tables
+Here is some setup that I foudn was needed along the way, that assits in performance
+
+
