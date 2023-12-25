@@ -19,31 +19,63 @@
     loop: 
       - { name: "iptables-persistent", state: "{{ package_state }}"}
 
-  - name: Reject incoming TCP/UDP traffic on port 443/80 (IPv4)
+  - name: Purge the entire IPv4 table of all chains and rules
     iptables:
-      chain: "{{ item.chain }}"
-      protocol: "{{ item.protocol }}"
-      destination_port: "{{ item.destination_port }}"
-      jump: "{{ item.jump }}"
-      reject_with: "{{ item.reject_with }}"
+      flush: true
       ip_version: "{{ item.ip_version }}"
     loop:
-      - { chain: "INPUT", protocol: "tcp", destination_port: "443", jump: "REJECT", reject_with: "tcp-reset", ip_version: "ipv4"}
-      - { chain: "INPUT", protocol: "udp", destination_port: "80", jump: "REJECT", reject_with: "icmp-port-unreachable", ip_version: "ipv4"}
-      - { chain: "INPUT", protocol: "udp", destination_port: "443", jump: "REJECT", reject_with: "icmp-port-unreachable", ip_version: "ipv4"}
+      - { ip_version: "ipv4" }
+      - { ip_version: "ipv6" }
 
-  - name: Reject incoming TCP/UDP traffic on port 443/80 (IPv6)
+  - name: Setting initial IP Tables configuration for Pi-hole
     iptables:
       chain: "{{ item.chain }}"
       protocol: "{{ item.protocol }}"
+      match: "{{ item.patch  | default(omit) }}"
+      source: "{{ item.source | default(omit) }}"
+      source_port: "{{ item.source_port | default(omit) }}"
       destination_port: "{{ item.destination_port }}"
+      in_interface: "{{ item.in_interface | default(omit) }}"
       jump: "{{ item.jump }}"
-      reject_with: "{{ item.reject_with }}"
+      action: "{{ item.action }}"
+      rule_num: "{{ item.rule_num | default(omit) }}"
       ip_version: "{{ item.ip_version }}"
     loop:
-      - { chain: "INPUT", protocol: "tcp", destination_port: "443", jump: "REJECT", reject_with: "tcp-reset", ip_version: "ipv6"}
-      - { chain: "INPUT", protocol: "udp", destination_port: "80", jump: "REJECT", reject_with: "icmp6-port-unreachable", ip_version: "ipv6"}
-      - { chain: "INPUT", protocol: "udp", destination_port: "443", jump: "REJECT", reject_with: "icmp6-port-unreachable", ip_version: "ipv6"}
+      - { chain: "INPUT", protocol: "tcp", match: "tcp", source: "192.168.0.0/16", destination_port: "80", jump: "ACCEPT", action: "insert", rule_num: "1", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "tcp",  match: "tcp", source: "127.0.0.0/8", destination_port: "53", jump: "ACCEPT", action: "insert", rule_num: "1", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "udp",  match: "udp", source: "127.0.0.0/8", destination_port: "53", jump: "ACCEPT", action: "insert", rule_num: "1", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "tcp",  match: "tcp", source: "192.168.0.0/16", destination_port: "53", jump: "ACCEPT", action: "insert", rule_num: "1", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "udp",  match: "udp", source: "192.168.0.0/16", destination_port: "53", jump: "ACCEPT", action: "insert", rule_num: "1", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "tcp",  destination_port: "4711", in_interface: lo, jump: "ACCEPT", action: "insert", rule_num: "1", ip_version: "ipv4"}
+      - { chain: "INPUT", protocol: "udp", match: "udp", source_port: "546:547",  destination_port: "546:547", jump: "ACCEPT", action: "insert", ip_version: "ipv6"}
+
+  - name: Allow DHCP Traffic
+    iptables:
+      chain: INPUT
+      protocol: udp
+      source_port: 67:68
+      destination_port: 67:68
+      jump: ACCEPT
+      action: insert
+      rule_num: 1
+
+  - name: Allow established and related connections (IPv4)
+    iptables:
+      chain: INPUT
+      ctstate: 
+        - RELATED
+        - ESTABLISHED
+      jump: ACCEPT
+      ip_version: ipv4
+
+  - name: Allow established and related connections (IPv6)
+    iptables:
+      chain: INPUT
+      ctstate:
+        - RELATED
+        - ESTABLISHED
+      jump: ACCEPT
+      ip_version: ipv6
 
   - name: Save iptable changes
     shell:
