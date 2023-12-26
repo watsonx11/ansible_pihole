@@ -46,7 +46,7 @@
       group: "{{ item.group }}"
     loop:
       - { path: "/var/log/unbound", state: "directory", mode: "0755", owner: "root", group: "root" }
-      - { path: "/var/log/unbound/unbound.log", state: "touch", mode: "0644", owner: "unbound", group: "unbound"}
+      - { path: "/var/log/unbound/unbound.log", state: "touch", mode: "0644", owner: "unbound", group: "unbound"} #TODO update to prevent an overwrite of the file
 
   - name: Download Current Root Hints File
     get_url:
@@ -59,7 +59,7 @@
       dest: /etc/unbound/unbound.conf.d/pi-hole.conf
       owner: root
       group: root
-      follow: false #This is kept to show the default state only, it is not needed
+      follow: false #<-- Default Value, added for clarity
 
   - name: Configure EDNS and DNS settings for Pi-hole
     lineinfile:
@@ -98,6 +98,7 @@
       line: '/var/log/unbound/unbound.log rw,'
       create: yes
       state: present
+    notify: Restart Unbound
 
   - name: Update Pi-Hole
     shell:
@@ -105,21 +106,16 @@
 
   - name: Generate the Pi-hole web password
     shell: 
-      cmd: openssl rand -base64 12
+      cmd: openssl rand -base64 12 #TODO move to variable in inventory to more easily allow users to decide password complexity
     register: pihole_password
 
   - name: Change Pi-hole web password
     shell:
       cmd: "pihole -a -p {{ pihole_password.stdout }}"
-
-  - name: Restart Unbound and Pi-Hole services
-    service:
-      name: "{{ item }}"
-      state: restarted
-    loop:
-      - unbound
-      - pihole-FTL
+    notify: Restart Pi-Hole DNS
 
   - name: Print the Pi-hole password
     debug:
       msg: "This password will not be saved, use {{ pihole_password.stdout }} to access the Web Interface"
+
+  #TODO Add ability to write password back to host running playbook

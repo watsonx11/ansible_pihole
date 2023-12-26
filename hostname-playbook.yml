@@ -1,0 +1,67 @@
+---
+- name: Configure Pi-hole Hostname and DNS Record
+  hosts: pihole #change as needed for how the inventory file is setup
+  become: yes
+  become_method: sudo
+  vars:
+    # host_name & domain_name are set in the inventory file in the [pihole:vars]
+    fqdn_name: "{{ host_name }}.{{ domain_name }}"
+  handlers:
+
+    - name: Restart avahi-daemon
+      systemd:
+        name: avahi-daemon
+        state: restarted
+
+    - name: Restart Pi-hole DNS
+      shell:
+        cmd: pihole restartdns
+
+  tasks:
+
+  - name: Gather facts
+    setup:
+
+  - name: Set VM facts to variables
+    set_fact:
+      ip_addr: "{{ ansible_default_ipv4.address }}"
+
+  - name: Set the hostname of the pihole
+    hostname:
+      name: "{{ host_name }}"
+
+  - name: Update /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      regexp: '^127.0.1.1\s+(?!{{ host_name }}.{{ domain_name }}\b).*'
+      line: "127.0.1.1 {{ host_name }}.{{ domain_name }} {{ host_name }}"
+      state: present
+    notify: Restart avahi-daemon
+  
+  - name: Add A-Name Record
+    lineinfile:
+      path: /etc/pihole/custom.list
+      line: "{{ ip_addr }} {{ fqdn_name }}"
+    notify: Restart Pi-hole DNS
+
+  - name: Check that A-Name Record has been created
+    uri:
+      url: "http://{{ host_name }}.{{ domain_name }}/admin"
+      return_content: yes
+    register: pihole_running
+
+  - name: Assert that the website is up (status code check)
+    assert:
+      that:
+        - pihole_running.status == 200
+      fail_msg: "Pihole Web Interface is not running, or the DNS entry has not been created"
+      success_msg: "Pihole Web Interface is accessible, DNS entry successful"
+
+  - name: Check Website Title
+    assert:
+      that:
+        - "title_check in pihole_running.content" #no {{}} around title_check b/c of jinja2 templating delimters
+      fail_msg: "Website title does not match"
+      success_msg: Website title matches the expected result
+
+  
