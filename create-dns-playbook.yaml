@@ -1,121 +1,123 @@
 ---
 - name: Turn a Pihole into a Recurrsive DNS
   hosts: pihole
-  become: yes
-  become_method: sudo
+  become: true
   handlers:
+
     - name: Restart Unbound
-      service:
+      ansible.builtin.service:
         name: unbound
         state: restarted
-    
+
     - name: Restart Pi-Hole DNS
-      service:
+      ansible.builtin.service:
         name: pihole-FTL
         state: restarted
 
   tasks:
-  - name: Check if Unbound is installed
-    command: which unbound
-    register: unbound_installed
-    failed_when: false
-    changed_when: false
 
-  - name: Gather service facts
-    service_facts:
-    when: unbound_installed.rc != 0
+    - name: Check if Unbound is installed
+      ansible.builtin.command: which unbound
+      register: unbound_installed
+      failed_when: false
+      changed_when: false
 
-  - name: Check if Unbound service is running
-    debug:
-      var: services.unbound
-    when: unbound_installed.rc != 0
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+      when: unbound_installed.rc != 0
 
-  - name: Install Unbound Package if not already installed
-    apt:
-      name: unbound 
-      state: present
-      update_cache: yes
-    when: unbound_installed.rc != 0 and (not services.unbound or services.unbound.state != 'running')
-    
-  - name: Ensure Logging Directory for Unbound exists
-    file:
-      path: "{{ item.path }}"
-      state: "{{ item.state }}"
-      mode: "{{ item.mode }}"
-      owner: "{{ item.owner }}"
-      group: "{{ item.group }}"
-    loop:
-      - { path: "/var/log/unbound", state: "directory", mode: "0755", owner: "root", group: "root" }
-      - { path: "/var/log/unbound/unbound.log", state: "touch", mode: "0644", owner: "unbound", group: "unbound"} #TODO update to prevent an overwrite of the file
+    - name: Check if Unbound service is running
+      ansible.builtin.debug:
+        var: services.unbound
+      when: unbound_installed.rc != 0
 
-  - name: Download Current Root Hints File
-    get_url:
-      url: https://www.internic.net/domain/named.root
-      dest: /var/lib/unbound/root.hints
+    - name: Install Unbound Package if not already installed
+      ansible.builtin.apt:
+        name: unbound
+        state: present
+        update_cache: true
+      when: unbound_installed.rc != 0 and (not services.unbound or services.unbound.state != 'running')
 
-  - name: Deploy Pi-hole configuration for Unbound
-    copy:
-      src: ./configuration_files/pi-hole.conf
-      dest: /etc/unbound/unbound.conf.d/pi-hole.conf
-      owner: root
-      group: root
-      follow: false #<-- Default Value, added for clarity
+    - name: Ensure Logging Directory for Unbound exists
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: "{{ item.state }}"
+        mode: "{{ item.mode }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+      loop:
+        - { path: "/var/log/unbound", state: "directory", mode: "0755", owner: "root", group: "root" }
+        # TODO update to prevent an overwrite of the file
+        - { path: "/var/log/unbound/unbound.log", state: "touch", mode: "0644", owner: "unbound", group: "unbound"}
 
-  - name: Configure EDNS and DNS settings for Pi-hole
-    lineinfile:
-      path: "{{ item.path }}"
-      line: "{{ item.line | default(omit) }}"
-      create: "{{ item.create | default(omit) }}"
-      regexp: "{{ item.regexp | default(omit) }}"
-      backrefs: "{{ item.backrefs | default(omit) }}"
-      state: "{{ item.state | default(omit) }}"
-    loop:
-      - { path: "/etc/dnsmasq.d/99-edns.conf", line: "edns-packet-max=1232", create: yes }
-      - { path: "/etc/pihole/setupVars.conf", regexp: "^PIHOLE_DNS_1=", line: "PIHOLE_DNS_1=127.0.0.1#5335", backrefs: yes }
-      - { path: "/etc/pihole/setupVars.conf", regexp: "^PIHOLE_DNS_2=", state: "absent"}
+    - name: Download Current Root Hints File
+      ansible.builtin.get_url:
+        url: https://www.internic.net/domain/named.root
+        dest: /var/lib/unbound/root.hints # TODO add file permissions
+        mode: "0644"
 
-  - name: Disable Unbound-ResolveConf.service
-    systemd:
-      name: unbound-resolvconf.service
-      enabled: no
-      state: stopped
+    - name: Deploy Pi-hole configuration for Unbound
+      ansible.builtin.copy:
+        src: ./configuration_files/pi-hole.conf
+        dest: /etc/unbound/unbound.conf.d/pi-hole.conf # TODO Add file permissions
+        owner: root
+        group: root
+        mode: "0644"
+        follow: false # <-- Default Value, added for clarity
 
-  - name: Comment out unbound_conf line in /etc/resolveconf.conf
-    lineinfile:
-      path: /etc/resolvconf.conf
-      regexp: '^unbound_conf='
-      line: '#unbound_conf='
-      backrefs: yes 
+    - name: Configure EDNS and DNS settings for Pi-hole
+      ansible.builtin.lineinfile:
+        path: "{{ item.path }}"
+        line: "{{ item.line | default(omit) }}"
+        create: "{{ item.create | default(omit) }}"
+        regexp: "{{ item.regexp | default(omit) }}"
+        backrefs: "{{ item.backrefs | default(omit) }}"
+        state: "{{ item.state | default(omit) }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "/etc/dnsmasq.d/99-edns.conf", line: "edns-packet-max=1232", create: true, mode: "0644" }
+        - { path: "/etc/pihole/setupVars.conf", regexp: "^PIHOLE_DNS_1=", line: "PIHOLE_DNS_1=127.0.0.1#5335", backrefs: true, mode: "0644" }
+        - { path: "/etc/pihole/setupVars.conf", regexp: "^PIHOLE_DNS_2=", state: "absent", mode: "0644" }
 
-  - name: Remove resolveconf_resolvers.conf file
-    file:
-      path: /etc/unbound/unbound.conf.d/resolvconf_resolvers.conf
-      state: absent
+    - name: Disable Unbound-ResolveConf.service
+      ansible.builtin.systemd:
+        name: unbound-resolvconf.service
+        enabled: false
+        state: stopped
 
-  - name: Ensure line is present in /etc/apparmor.d/local/usr.sbin.unbound
-    lineinfile:
-      path: /etc/apparmor.d/local/usr.sbin.unbound
-      line: '/var/log/unbound/unbound.log rw,'
-      create: yes
-      state: present
-    notify: Restart Unbound
+    - name: Comment out unbound_conf line in /etc/resolveconf.conf
+      ansible.builtin.lineinfile:
+        path: /etc/resolvconf.conf
+        regexp: '^unbound_conf='
+        line: '#unbound_conf='
+        backrefs: true
 
-  - name: Update Pi-Hole
-    shell:
-      cmd: pihole -up
+    - name: Remove resolveconf_resolvers.conf file
+      ansible.builtin.file:
+        path: /etc/unbound/unbound.conf.d/resolvconf_resolvers.conf
+        state: absent
 
-  - name: Generate the Pi-hole web password
-    shell: 
-      cmd: openssl rand -base64 12 #TODO move to variable in inventory to more easily allow users to decide password complexity
-    register: pihole_password
+    - name: Ensure line is present in /etc/apparmor.d/local/usr.sbin.unbound # TODO Set file permissions
+      ansible.builtin.lineinfile:
+        path: /etc/apparmor.d/local/usr.sbin.unbound
+        line: '/var/log/unbound/unbound.log rw,'
+        create: true
+        state: present
+        mode: "0700"
+      notify: Restart Unbound
 
-  - name: Change Pi-hole web password
-    shell:
-      cmd: "pihole -a -p {{ pihole_password.stdout }}"
-    notify: Restart Pi-Hole DNS
+    - name: Update Pi-Hole
+      ansible.builtin.command: pihole -up
 
-  - name: Print the Pi-hole password
-    debug:
-      msg: "This password will not be saved, use {{ pihole_password.stdout }} to access the Web Interface"
+    - name: Generate the Pi-hole web password
+      ansible.builtin.command: openssl rand -base64 12 # TODO move to variable in inventory to more easily allow users to decide password complexity
+      register: pihole_password
 
-  #TODO Add ability to write password back to host running playbook
+    - name: Change Pi-hole web password
+      ansible.builtin.command: "pihole -a -p {{ pihole_password.stdout }}"
+      notify: Restart Pi-Hole DNS
+
+    - name: Print the Pi-hole password
+      ansible.builtin.debug:
+        msg: "This password will not be saved, use {{ pihole_password.stdout }} to access the Web Interface"
+    # TODO Add ability to write password back to host running playbook
