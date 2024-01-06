@@ -1,0 +1,120 @@
+---
+- name: Check to See if Pi-Hole is installed, and Install if necessary
+  hosts: pihole2
+  become: true
+
+  tasks:
+
+    - name: Check to see if Pi-hole is installed
+      ansible.builtin.command:
+        cmd: pihole version
+      register: pihole_version
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display Pi-hole version if installed
+      ansible.builtin.debug:
+        msg: "{{ pihole_version.stdout_lines[0] }}"
+      when: pihole_version.rc == 0
+
+    - name: Report Pi-hole is not installed
+      ansible.builtin.debug:
+        msg: "Pi-hole is not installed"
+      when: pihole_version.rc != 0
+
+    - name: Create pihole user, if it does not exist
+      ansible.builtin.user:
+        name: pihole
+        system: true
+        shell: /bin/false
+        home: /etc/pihole
+        create_home: true
+
+    - name: Check if setupVars.conf exists
+      ansible.builtin.stat:
+        path: /etc/pihole/setupVars.conf
+      register: setupvars_status
+
+    - name: Report if setupVars.conf exists
+      ansible.builtin.debug:
+        msg: "setupVars.conf exists"
+      when: setupvars_status.stat.exists
+
+    - name: Report that setupVars.conf does not exist
+      ansible.builtin.debug:
+        msg: "setupVars.conf does not exist"
+      when: not (setupvars_status.stat.exists)
+
+    - name: Create /etc/pihole/setupVars.conf
+      ansible.builtin.copy:
+        dest: /etc/pihole/setupVars.conf
+        content: |
+          #; Created via Ansible
+          #; Make the INSTALL_WEB_SERVER or INTERFACE false along with LIGHTPPD_ENABLED false to not install
+          #; the associated web interface
+          PIHOLE_INTERFACE=eth0
+          PIHOLE_DNS_1=8.8.8.8
+          PIHOLE_DNS_2=8.8.4.4
+          QUERY_LOGGING=true
+          INSTALL_WEB_SERVER=true
+          INSTALL_WEB_INTERFACE=true
+          LIGHTTPD_ENABLED=true
+          CACHE_SIZE=10000
+          DNS_FQDN_REQUIRED=true
+          DNS_BOGUS_PRIV=true
+          DNSMASQ_LISTENING=local
+          BLOCKING_ENABLED=true
+        owner: root
+        group: root
+        mode: '0644'
+      when: not (setupvars_status.stat.exists)
+
+    - name: Create /tmp/pihole directory
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: "{{ item.state }}"
+        mode: "{{ item.mode }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+      loop:
+        - { path: "/tmp/pihole", state: "directory", mode: "0770", owner: "root", group: "root"}
+      when: pihole_version.rc != 0
+
+    - name: Download Pi-hole Installation Script
+      ansible.builtin.get_url:
+        url: https://install.pi-hole.net
+        dest: /tmp/pihole/install.pi-hole.sh
+        mode: '0755'
+      become: true
+      when: pihole_version.rc != 0
+
+    - name: Execute Pi-hole installation script in unattended mode (This might take sometime)
+      ansible.builtin.command:
+        cmd: /tmp/pihole/install.pi-hole.sh --unattended
+      become: true
+      when: pihole_version.rc != 0
+      register: installation_result
+      changed_when: installation_result.rc != 0
+
+    - name: Get Pi-hole Version, and validate installation occured
+      ansible.builtin.command:
+        cmd: pihole -v
+      register: pihole_version_validation
+      changed_when: installation_result is changed
+
+    - name: Display Pi-hole Version
+      ansible.builtin.debug:
+        msg: "{{ pihole_version_validation.stdout_lines[0] }}"
+
+    - name: Cleanup Installation Artifacts
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: "{{ item.state }}"
+        mode: "{{ item.mode | default(omit) }}"
+      loop:
+        - { path: "/tmp/pihole/install.pi-hole.sh", state: "absent"}
+        - { path: "/tmp/pihole", state: "absent"}
+
+    - name: Next Playbook message
+      ansible.builtin.debug:
+        msg: "Run 02-hostname-playbook.yaml to continue the Pi-hole installation"

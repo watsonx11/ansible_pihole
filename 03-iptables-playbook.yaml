@@ -1,0 +1,145 @@
+---
+- name: Configure IP-Tables for Pi-hole
+  hosts: pihole2
+  become: true
+
+  tasks:
+
+  # TODO put a warning, and a user validation that that running this playbook will
+  # > clear out the target machines entire iptables
+
+    - name: Perform an apt udpate
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Check/Install iptables-persistent package
+      vars:
+        package_state: "present"
+      ansible.builtin.apt:
+        name: "{{ item.name }}"
+        state: "{{ item.state }}"
+      loop:
+        - { name: "iptables-persistent", state: "{{ package_state }}"}
+
+    - name: Purge the entire IPv4 table of all chains and rules
+      ansible.builtin.iptables:
+        flush: true
+        ip_version: "{{ item.ip_version }}"
+      loop:
+        - { ip_version: "ipv4" }
+        - { ip_version: "ipv6" }
+
+    - name: Setting initial IP Tables configuration for Pi-hole
+      ansible.builtin.iptables:
+        chain: "{{ item.chain | default(omit) }}"
+        protocol: "{{ item.protocol }}"
+        match: "{{ item.patch | default(omit) }}"
+        source: "{{ item.source | default(omit) }}"
+        source_port: "{{ item.source_port | default(omit) }}"
+        destination_port: "{{ item.destination_port }}"
+        in_interface: "{{ item.in_interface | default(omit) }}"
+        jump: "{{ item.jump }}"
+        action: "{{ item.action }}"
+        rule_num: "{{ item.rule_num | default(omit) }}"
+        ip_version: "{{ item.ip_version }}"
+      loop:
+        - chain: "INPUT"
+          protocol: 'tcp'
+          match: 'tcp'
+          source: '192.168.0.0/16'
+          destination_port: '80'
+          jump: 'ACCEPT'
+          action: 'insert'
+          rule_num: '1'
+          ip_version: 'ipv4'
+        - chain: "INPUT"
+          protocol: 'tcp'
+          match: 'tcp'
+          source: '127.0.0.0/8'
+          destination_port: '53'
+          jump: 'ACCEPT'
+          action: 'insert'
+          rule_num: '1'
+          ip_version: 'ipv4'
+        - chain: "INPUT"
+          protocol: 'udp'
+          match: 'udp'
+          source: '127.0.0.0/8'
+          destination_port: '53'
+          jump: 'ACCEPT'
+          action: 'insert'
+          rule_num: '1'
+          ip_version: 'ipv4'
+        - chain: "INPUT"
+          protocol: 'tcp'
+          match: 'tcp'
+          source: '192.168.0.0/16'
+          destination_port: '53'
+          jump: 'ACCEPT'
+          action: 'insert'
+          rule_num: '1'
+          ip_version: 'ipv4'
+        - chain: "INPUT"
+          protocol: 'udp'
+          match: 'udp'
+          source: '192.168.0.0/16'
+          destination_port: '53'
+          jump: 'ACCEPT'
+          action: 'insert'
+          rule_num: '1'
+          ip_version: 'ipv4'
+        - chain: "INPUT"
+          protocol: 'tcp'
+          destination_port: '4711'
+          in_interface: lo
+          jump: 'ACCEPT'
+          action: 'insert'
+          rule_num: '1'
+          ip_version: 'ipv4'
+        - chain: 'INPUT'
+          protocol: 'udp'
+          match: 'udp'
+          source_port: '546:547'
+          destination_port: '546:547'
+          jump: 'ACCEPT'
+          action: 'insert'
+          ip_version: 'ipv6'
+
+    - name: Allow DHCP Traffic # Only needed if using Pi-hole as a DHCP Server
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: udp
+        source_port: 67:68
+        destination_port: 67:68
+        jump: ACCEPT
+        action: insert
+        rule_num: 1
+
+    - name: Allow established and related connections (IPv4)
+      ansible.builtin.iptables:
+        chain: INPUT
+        ctstate:
+          - RELATED
+          - ESTABLISHED
+        jump: ACCEPT
+        ip_version: ipv4
+
+    - name: Allow established and related connections (IPv6)
+      ansible.builtin.iptables:
+        chain: INPUT
+        ctstate:
+          - RELATED
+          - ESTABLISHED
+        jump: ACCEPT
+        ip_version: ipv6
+
+    - name: Save iptable changes
+      ansible.builtin.command:
+        cmd: netfilter-persistent save
+      register: save_status
+      changed_when: save_status is changed
+
+    - name: Next Playbook message
+      ansible.builtin.debug:
+        msg: "Pi-hole is installed and configured.  Run 04-create-dns-playbook.yaml to configure a local DNS"

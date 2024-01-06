@@ -1,0 +1,43 @@
+---
+- name: Update, Install, and Upgrade Packages for Pihole
+  hosts: pihole2
+  become: true
+  tasks:
+
+    - name: Perform an apt udpate
+      ansible.builtin.apt:
+        update_cache: 'yes'
+        cache_valid_time: 3600
+
+    - name: Install Required Packages for Pi-hole (reduce install time)
+      vars:
+        package_state: "present"
+      ansible.builtin.apt:
+        name: "{{ item.name }}"
+        state: "{{ item.state }}"
+      loop: # Pre-Installing some of the required Pi-hole packages to reduce the installation
+        - { name: "vim", state: "{{ package_state }}"}
+        - { name: "dnsutils", state: "{{ package_state }}"}
+        - { name: "git", state: "{{ package_state }}"}
+        - { name: "dialog", state: "{{ package_state }}"}
+        - { name: "idn2", state: "{{ package_state }}"}
+        - { name: "netcat-openbsd", state: "{{ package_state }}"}
+        - { name: "jq", state: "{{ package_state }}"}
+        - { name: "sqlite3", state: "{{ package_state }}"}
+
+    - name: Perform an apt upgrade
+      ansible.builtin.apt:
+        upgrade: 'yes'
+
+    - name: Remove all uneeded dependancies
+      ansible.builtin.apt:
+        autoremove: true
+        purge: true
+
+    - name: Run the equivalent of apt clean
+      ansible.builtin.apt:
+        clean: true
+
+    - name: Next Playbook message
+      ansible.builtin.debug:
+        msg: "Run 01-install-pihole-playbook.yaml to continue the Pi-hole installation"

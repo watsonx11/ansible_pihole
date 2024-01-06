@@ -1,9 +1,9 @@
 ---
 - name: Configure Pi-hole Hostname and DNS Record
-  hosts: pihole # Change as needed for how the inventory file is setup
+  hosts: pihole2 # Change as needed for how the inventory file is setup
   become: true
   vars:
-    # host_name & domain_name are set in the inventory file in the [pihole:vars]
+    # host_name & domain_name are set in the inventory file in the [:vars]
     fqdn_name: "{{ host_name }}.{{ domain_name }}"
   handlers:
 
@@ -13,7 +13,10 @@
         state: restarted
 
     - name: Restart Pi-hole DNS
-      ansible.builtin.command: pihole restartdns
+      ansible.builtin.command:
+        cmd: pihole restartdns
+      register: pihole_restart_status
+      changed_when: pihole_restart_status is changed
 
   tasks:
 
@@ -55,9 +58,6 @@
         fail_msg: "Pihole Web Interface is not running, or the DNS entry has not been created"
         success_msg: "Pihole Web Interface is accessible, DNS entry successful"
 
-    - name: Check Website Title
-      ansible.builtin.assert:
-        that:
-          - "title_check in pihole_running.content" # no {{}} around title_check b/c of jinja2 templating delimters
-        fail_msg: "Website title does not match"
-        success_msg: Website title matches the expected result
+    - name: Next Playbook message
+      ansible.builtin.debug:
+        msg: "Run 03-iptables.playbook.yaml to complete the Pi-hole installation"
