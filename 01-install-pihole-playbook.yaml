@@ -1,6 +1,6 @@
 ---
 - name: Check to See if Pi-Hole is installed, and Install if necessary
-  hosts: pihole2
+  hosts: pihole
   become: true
 
   tasks:

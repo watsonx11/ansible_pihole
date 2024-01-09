@@ -1,6 +1,6 @@
 ---
 - name: Configure IP-Tables for Pi-hole
-  hosts: pihole2
+  hosts: pihole
   become: true
 
   tasks:

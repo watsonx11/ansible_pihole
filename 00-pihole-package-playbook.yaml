@@ -1,6 +1,6 @@
 ---
 - name: Update, Install, and Upgrade Packages for Pihole
-  hosts: pihole2
+  hosts: pihole
   become: true
   tasks:
 

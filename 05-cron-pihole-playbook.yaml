@@ -1,0 +1,26 @@
+---
+- name: Create Cron jobs
+  hosts: pihole
+  become: true
+  tasks:
+
+    - name: Setup Cron job to retrieve root hints # Runs on the first day of the month at 2am
+      ansible.builtin.cron:
+        name: "Update root hints"
+        job: "wget https://www.internic.net/domain/named.root -qO- | sudo tee /var/lib/unbound/root.hints"
+        minute: "0"
+        hour: "2"
+        day: "1"
+        user: root
+        cron_file: "monthly-update-root-hints"
+        state: present
+
+    - name: Setup Cron job to clear out logs greater than 30 days old
+      ansible.builtin.cron:
+        name: "Clean up old logs (30+days)"
+        job: "/usr/bin/find /path/to/logs -type f -name '*.log' -mtime +30 -delete"
+        minute: 0
+        hour: "3"
+        user: root
+        cron_file: "log_cleanup"
+        state: present

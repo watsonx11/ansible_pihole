@@ -1,0 +1,35 @@
+---
+- name: Change Pi-hole web interface password
+  hosts: pihole
+  gather_facts: false
+  vars_prompt:
+    - name: user_input
+      prompt: "Please enter a desired web password length (e.g. 12)"
+      private: false
+
+  tasks:
+
+    - name: Validate the User Input
+      ansible.builtin.fail:
+        msg: "The value entered is not a number"
+      when: user_input | regex_search("^['0-9']+$") == None
+
+    - name: Convert the inputed user value from a string to an integer
+      ansible.builtin.set_fact:
+        user_input: "{{ user_input | int }}"
+
+    - name: Generate the Pi-hole web password that is
+      ansible.builtin.command:
+        cmd: "openssl rand -base64 {{ user_input }}"
+      register: pihole_password
+      changed_when: pihole_password is changed
+
+    - name: Change Pi-hole web password
+      ansible.builtin.command:
+        cmd: "pihole -a -p {{ pihole_password.stdout }}"
+      register: pihole_status
+      changed_when: pihole_status is changed
+
+    - name: Print the Pi-hole password
+      ansible.builtin.debug:
+        msg: "This password will not be saved, use {{ pihole_password.stdout }} to access the Web Interface"

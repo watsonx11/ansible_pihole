@@ -1,6 +1,6 @@
 ---
 - name: Configure Pi-hole Hostname and DNS Record
-  hosts: pihole2 # Change as needed for how the inventory file is setup
+  hosts: pihole # Change as needed for how the inventory file is setup
   become: true
   vars:
     # host_name & domain_name are set in the inventory file in the [:vars]

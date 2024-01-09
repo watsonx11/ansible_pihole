@@ -1,6 +1,6 @@
 ---
 - name: Turn a Pihole into a Recurrsive DNS
-  hosts: pihole2
+  hosts: pihole
   become: true
   handlers:
 

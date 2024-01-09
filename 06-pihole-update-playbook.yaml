@@ -1,0 +1,11 @@
+---
+- name: Playbook to update pihole to the latest version
+  hosts: pihole
+  become: true
+  tasks:
+
+    - name: Update Pi-hole
+      ansible.builtin.command:
+        cmd: pihole -up
+      register: pihole_update_status
+      changed_when: pihole_update_status is changed
